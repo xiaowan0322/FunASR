@@ -72,7 +72,7 @@ import tritonclient.grpc.aio as grpcclient
 from lhotse import CutSet, load_manifest
 from tritonclient.utils import np_to_triton_dtype
 
-from icefall.utils import store_transcripts, write_error_stats
+# from icefall.utils import store_transcripts, write_error_stats
 
 DEFAULT_MANIFEST_FILENAME = "/mnt/samsung-t7/yuekai/aishell-test-dev-manifests/data/fbank/aishell_cuts_test.jsonl.gz"  # noqa
 
@@ -493,6 +493,7 @@ async def main():
 
     rtf = elapsed / total_duration
 
+    print("Speech: {:.4f}".format(1.0 / rtf))
     s = f"RTF: {rtf:.4f}\n"
     s += f"total_duration: {total_duration:.3f} seconds\n"
     s += f"({total_duration/3600:.2f} hours)\n"
@@ -518,6 +519,7 @@ async def main():
     with open("rtf.txt", "w") as f:
         f.write(s)
 
+    """
     name = Path(filename).stem.split(".")[0]
     results = sorted(results)
     store_transcripts(filename=f"recogs-{name}.txt", texts=results)
@@ -535,6 +537,7 @@ async def main():
         )
         with open(args.stats_file, "w") as f:
             json.dump(stats, f)
+    """
 
 
 if __name__ == "__main__":

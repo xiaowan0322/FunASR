@@ -1,0 +1,43 @@
+name: "funasr"
+backend: "python"
+max_batch_size: 64
+
+parameters [
+  {
+    key: "model_path"
+    value: { string_value: "./tmp_model_funasr/funasr/bladedisc_fp16"}
+  }
+]
+
+input [
+  {
+    name: "speech"
+    data_type: TYPE_FP32
+    dims: [-1, 560]  # 80
+  },
+  {
+    name: "speech_lengths"
+    data_type: TYPE_INT32
+    dims: [1]
+  }
+]
+
+output [
+  {
+    name: "text"
+    data_type: TYPE_STRING
+    dims: [-1]
+  }
+]
+
+dynamic_batching {
+  preferred_batch_size: [ 2,4 ]
+  max_queue_delay_microseconds: 500
+}
+
+instance_group [
+    {
+      count: 1
+      kind: KIND_GPU
+    }
+]

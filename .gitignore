@@ -13,3 +13,9 @@ export/*
 .eggs
 MaaS-lib
 .gitignore
+funasr.egg-info
+
+*.mvn
+*.yaml
+*.torchscripts
+log.*

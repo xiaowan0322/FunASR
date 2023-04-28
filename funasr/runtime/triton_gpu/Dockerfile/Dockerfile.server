@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/tritonserver:23.01-py3
+FROM nvcr.io/nvidia/tritonserver:22.08-py3
 # https://docs.nvidia.com/deeplearning/frameworks/support-matrix/index.html
 # Please choose previous tritonserver:xx.xx if you encounter cuda driver mismatch issue
 
@@ -11,9 +11,12 @@ RUN apt-get update  && apt-get -y install \
     libsndfile1
 
 # -i https://pypi.tuna.tsinghua.edu.cn/simple
-RUN pip3 install torch torchaudio 
-RUN pip3 install kaldifeat pyyaml
+ADD ./scripts/torch-1.12.0+cu113-cp38-cp38-linux_x86_64.whl ./torch-1.12.0+cu113-cp38-cp38-linux_x86_64.whl
+RUN pip3 install ./torch-1.12.0+cu113-cp38-cp38-linux_x86_64.whl --index-url http://mirrors.aliyun.com/pypi/simple --trusted-host mirrors.aliyun.com --disable-pip-version-check
+ADD ./scripts/torchaudio-0.12.0+cu113-cp38-cp38-linux_x86_64.whl ./torchaudio-0.12.0+cu113-cp38-cp38-linux_x86_64.whl
+RUN pip3 install ./torchaudio-0.12.0+cu113-cp38-cp38-linux_x86_64.whl --index-url http://mirrors.aliyun.com/pypi/simple --trusted-host mirrors.aliyun.com --disable-pip-version-check
+RUN pip3 install kaldifeat pyyaml --index-url http://mirrors.aliyun.com/pypi/simple --trusted-host mirrors.aliyun.com --disable-pip-version-check
 
 # Dependency for client
-RUN pip3 install soundfile grpcio-tools tritonclient
+RUN pip3 install soundfile grpcio-tools tritonclient --index-url http://mirrors.aliyun.com/pypi/simple --trusted-host mirrors.aliyun.com --disable-pip-version-check
 WORKDIR /workspace

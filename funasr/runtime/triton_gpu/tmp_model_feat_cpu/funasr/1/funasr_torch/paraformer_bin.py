@@ -52,125 +52,42 @@ class Paraformer():
         else:
             self.pred_bias = 0
 
-    # """
-    def __call__(self, wav_content: Union[str, np.ndarray, List[str]], **kwargs) -> List:
-        waveform_list = self.load_data(wav_content, self.frontend.opts.frame_opts.samp_freq)
-        waveform_nums = len(waveform_list)
+    def __call__(self, feats, feats_len, **kwargs) -> List:
         asr_res = []
-        for beg_idx in range(0, waveform_nums, self.batch_size):
-            
-            end_idx = min(waveform_nums, beg_idx + self.batch_size)
-            feats, feats_len = self.extract_feat(waveform_list[beg_idx:end_idx])
-            try:
-                if next(self.ort_infer.parameters()).is_cuda:
-                    feats, feats_len = feats.cuda(), feats_len.cuda()
-                with torch.no_grad():
-                    outputs = self.ort_infer(feats, feats_len)
-                am_scores, valid_token_lens = outputs[0], outputs[1]
-                if len(outputs) == 4:
-                    # for BiCifParaformer Inference
-                    us_alphas, us_peaks = outputs[2], outputs[3]
-                else:
-                    us_alphas, us_peaks = None, None
-            except:
-                #logging.warning(traceback.format_exc())
-                logging.warning("input wav is silence or noise")
-                preds = ['']
+        # feats, feats_len = self.extract_feat(waveform_list)
+        print(feats.shape)
+        return [{'preds': ('None')}] * feats.shape[0]
+        try:
+            if next(self.ort_infer.parameters()).is_cuda:
+                feats, feats_len = feats.cuda(), feats_len.cuda()
+            with torch.no_grad():
+                outputs = self.ort_infer(feats, feats_len)
+            am_scores, valid_token_lens = outputs[0], outputs[1]
+            if len(outputs) == 4:
+                # for BiCifParaformer Inference
+                us_alphas, us_peaks = outputs[2], outputs[3]
             else:
-                preds = self.decode(am_scores, valid_token_lens)
-                if us_peaks is None:
-                    for pred in preds:
-                        pred = sentence_postprocess(pred)
-                        asr_res.append({'preds': pred})
-                else:
-                    for pred, us_peaks_ in zip(preds, us_peaks):
-                        raw_tokens = pred
-                        timestamp, timestamp_raw = time_stamp_lfr6_onnx(us_peaks_, copy.copy(raw_tokens))
-                        text_proc, timestamp_proc, _ = sentence_postprocess(raw_tokens, timestamp_raw)
-                        # logging.warning(timestamp)
-                        if len(self.plot_timestamp_to):
-                            self.plot_wave_timestamp(waveform_list[0], timestamp, self.plot_timestamp_to)
-                        asr_res.append({'preds': text_proc, 'timestamp': timestamp_proc, "raw_tokens": raw_tokens})
+                us_alphas, us_peaks = None, None
+        except:
+            #logging.warning(traceback.format_exc())
+            logging.warning("input wav is silence or noise")
+            preds = ['']
+        else:
+            preds = self.decode(am_scores, valid_token_lens)
+            if us_peaks is None:
+                for pred in preds:
+                    pred = sentence_postprocess(pred)
+                    asr_res.append({'preds': pred})
+            else:
+                for pred, us_peaks_ in zip(preds, us_peaks):
+                    raw_tokens = pred
+                    timestamp, timestamp_raw = time_stamp_lfr6_onnx(us_peaks_, copy.copy(raw_tokens))
+                    text_proc, timestamp_proc, _ = sentence_postprocess(raw_tokens, timestamp_raw)
+                    # logging.warning(timestamp)
+                    if len(self.plot_timestamp_to):
+                        self.plot_wave_timestamp(waveform_list[0], timestamp, self.plot_timestamp_to)
+                    asr_res.append({'preds': text_proc, 'timestamp': timestamp_proc, "raw_tokens": raw_tokens})
         return asr_res
-    # """
-
-    """
-    def __call__(self, wav_content: Union[str, np.ndarray, List[str]], **kwargs) -> List:
-        waveform_list = self.load_data(wav_content, self.frontend.opts.frame_opts.samp_freq)
-        waveform_nums = len(waveform_list)
-        asr_res = []
-
-        import math
-        import threading
-        condition = threading.Condition()
-        num = math.ceil(waveform_nums / self.batch_size)
-        feats_list = [None] * num
-        feats_len_list = [None] * num
-        asr_res = [None] * num
-
-        def _read():
-            for beg_idx in range(0, waveform_nums, self.batch_size):
-                end_idx = min(waveform_nums, beg_idx + self.batch_size)
-                feats, feats_len = self.extract_feat(waveform_list[beg_idx:end_idx])
-                idx = math.floor(beg_idx / self.batch_size)
-                feats_list[idx] = feats
-                feats_len_list[idx] = feats_len
-                print('read: {}'.format(idx))
-                with condition:
-                    condition.notify()
-
-        def _infer():
-            for beg_idx in range(0, waveform_nums, self.batch_size):
-                idx = math.floor(beg_idx / self.batch_size)
-                if feats_list[idx] is None:
-                    print('wait: {}'.format(idx))
-                    with condition:
-                        condition.wait()
-                feats, feats_len = feats_list[idx], feats_len_list[idx]
-                try:
-                    if next(self.ort_infer.parameters()).is_cuda:
-                        feats, feats_len = feats.cuda(), feats_len.cuda()
-                    with torch.no_grad():
-                        import time
-                        tic = time.time()
-                        outputs = self.ort_infer(feats, feats_len)
-                        print(time.time() - tic)
-                    am_scores, valid_token_lens = outputs[0], outputs[1]
-                    if len(outputs) == 4:
-                        # for BiCifParaformer Inference
-                        us_alphas, us_peaks = outputs[2], outputs[3]
-                    else:
-                        us_alphas, us_peaks = None, None
-                except:
-                    #logging.warning(traceback.format_exc())
-                    logging.warning("input wav is silence or noise")
-                    preds = ['']
-                else:
-                    preds = self.decode(am_scores, valid_token_lens)
-                    if us_peaks is None:
-                        for pred in preds:
-                            pred = sentence_postprocess(pred)
-                            asr_res[idx] = {'preds': pred}
-                    else:
-                        for pred, us_peaks_ in zip(preds, us_peaks):
-                            raw_tokens = pred
-                            timestamp, timestamp_raw = time_stamp_lfr6_onnx(us_peaks_, copy.copy(raw_tokens))
-                            text_proc, timestamp_proc, _ = sentence_postprocess(raw_tokens, timestamp_raw)
-                            # logging.warning(timestamp)
-                            if len(self.plot_timestamp_to):
-                                self.plot_wave_timestamp(waveform_list[0], timestamp, self.plot_timestamp_to)
-                            asr_res[idx] = {'preds': text_proc, 'timestamp': timestamp_proc, "raw_tokens": raw_tokens}
-                print('infer: {}'.format(idx))
-
-        t1 = threading.Thread(target=_read, args=())
-        t2 = threading.Thread(target=_infer, args=())
-        t1.start()
-        t2.start()
-        t1.join()
-        t2.join()
-
-        return asr_res
-    """
 
     def plot_wave_timestamp(self, wav, text_timestamp, dest):
         # TODO: Plot the wav and timestamp results with matplotlib

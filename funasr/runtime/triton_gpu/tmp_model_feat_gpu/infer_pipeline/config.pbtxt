@@ -1,0 +1,56 @@
+name: "infer_pipeline"
+platform: "ensemble"
+max_batch_size: 64
+
+input [
+  {
+    name: "WAV"
+    data_type: TYPE_FP32
+    dims: [-1]
+  }
+]
+
+output [
+  {
+    name: "TEXT"
+    data_type: TYPE_STRING
+    dims: [1]
+  }
+]
+
+ensemble_scheduling {
+ step [
+   {
+    model_name: "feature_extractor"
+    model_version: -1
+    input_map {
+      key: "wav"
+      value: "WAV"
+    }
+    output_map {
+      key: "speech"
+      value: "SPEECH"
+    }
+    output_map {
+      key: "speech_lengths"
+      value: "SPEECH_LENGTHS"
+    }
+   },
+   {
+    model_name: "funasr"
+    model_version: -1
+    input_map {
+      key: "speech"
+      value: "SPEECH"
+    }
+    input_map {
+      key: "speech_lengths"
+      value: "SPEECH_LENGTHS"
+    }
+    output_map {
+      key: "text"
+      value: "TEXT"
+    }
+  }
+ ]
+}

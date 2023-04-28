@@ -1,0 +1,50 @@
+name: "feature_extractor"
+backend: "python"
+max_batch_size: 64
+
+parameters [
+  {
+    key: "model_path"
+    value: { string_value: "./tmp_model_funasr/funasr/bladedisc_fp16"}
+  },
+  {
+    key: "cmvn_path"
+    value: { string_value: "./tmp_model_funasr/funasr/bladedisc_fp16/am.mvn"}
+  },
+  {
+    key: "config_path"
+    value: { string_value: "./tmp_model_funasr/funasr/bladedisc_fp16/config.yaml"}
+  }
+
+]
+
+input [
+  {
+    name: "wav"
+    data_type: TYPE_FP32
+    dims: [-1]
+  }
+]
+
+output [
+  {
+    name: "speech"
+    data_type: TYPE_FP32
+    dims: [-1, 560]  # 80
+  },
+  {
+    name: "speech_lengths"
+    data_type: TYPE_INT32
+    dims: [1]
+  }
+]
+
+dynamic_batching {
+  }
+
+instance_group [
+    {
+      count: 1
+      kind: KIND_CPU
+    }
+]
