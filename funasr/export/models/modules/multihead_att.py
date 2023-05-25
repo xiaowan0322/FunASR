@@ -18,6 +18,7 @@ class MultiHeadedAttentionSANM(nn.Module):
         self.attn = None
         self.all_head_size = self.h * self.d_k
 
+    # """
     def forward(self, x, mask):
         mask_3d_btd, mask_4d_bhlt = mask
         # import pdb; pdb.set_trace()
@@ -27,6 +28,18 @@ class MultiHeadedAttentionSANM(nn.Module):
         scores = torch.matmul(q_h, k_h.transpose(-2, -1))
         att_outs = self.forward_attention(v_h, scores, mask_4d_bhlt)
         return att_outs + fsmn_memory
+    """
+    # MASK
+    def forward(self, x, mask1, mask2):
+        mask_3d_btd, mask_4d_bhlt = mask1, mask2
+        # import pdb; pdb.set_trace()
+        q_h, k_h, v_h, v = self.forward_qkv(x)
+        fsmn_memory = self.forward_fsmn(v, mask_3d_btd)
+        q_h = q_h * self.d_k**(-0.5)
+        scores = torch.matmul(q_h, k_h.transpose(-2, -1))
+        att_outs = self.forward_attention(v_h, scores, mask_4d_bhlt)
+        return att_outs + fsmn_memory
+    """
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.h, self.d_k)

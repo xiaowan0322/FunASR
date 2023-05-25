@@ -1,2 +1,7 @@
 *.pt
+*.torchscripts
 *.pth
+log.*
+
+report*.nsys-rep
+report*.sqlite

@@ -47,7 +47,7 @@ def recognize(model_file, batch_size=1, tf32=-1):
         save_timeline = False
         # save_timeline = True
         all_time = 0
-        for i in range(10000):
+        for i in range(100):
             tic = time.time()
             if save_timeline:
                 activities = [

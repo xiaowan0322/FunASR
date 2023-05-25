@@ -54,6 +54,14 @@ class ParaformerSANMDecoder(nn.Module):
         self.output_layer = model.output_layer
         self.after_norm = model.after_norm
         self.model_name = model_name
+
+        import os
+        self.export_fp16 = float(os.environ.get('EXPORT_FP16', False))
+        if self.export_fp16:
+            self.model.decoders.half()
+            self.model.decoders3.half()
+            self.output_layer.half()
+            self.after_norm.half()
         
 
     def prepare_mask(self, mask):
@@ -86,6 +94,11 @@ class ParaformerSANMDecoder(nn.Module):
 
         x = tgt
         # import pdb; pdb.set_trace()
+        if self.export_fp16:
+            x = x.half()
+            tgt_mask = tgt_mask.half()
+            memory = memory.half()
+            memory_mask = memory_mask.half()
         x, tgt_mask, memory, memory_mask, _ = self.model.decoders(
             x, tgt_mask, memory, memory_mask
         )
@@ -99,6 +112,7 @@ class ParaformerSANMDecoder(nn.Module):
         )
         x = self.after_norm(x)
         x = self.output_layer(x)
+        if self.export_fp16: x = x.float()
 
         return x, ys_in_lens
 

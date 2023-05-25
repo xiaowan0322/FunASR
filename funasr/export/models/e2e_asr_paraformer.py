@@ -76,6 +76,7 @@ class Paraformer(nn.Module):
         # print('predictor: {:.4f}'.format(time.time() - tic))
 
         # tic = time.time()
+        # import pdb; pdb.set_trace()
         decoder_out, _ = self.decoder(enc, enc_len, pre_acoustic_embeds, pre_token_length)
         # print('decoder: {:.4f}'.format(time.time() - tic))
         decoder_out = torch.log_softmax(decoder_out, dim=-1)

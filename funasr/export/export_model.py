@@ -71,7 +71,7 @@ class ModelExport:
         print("output dir: {}".format(export_dir))
 
 
-    def _torch_quantize(self, model):
+    def _torch_quantize(self, model, quant_input=None):
         def _run_calibration_data(m):
             # using dummy inputs for a example
             if self.audio_in is not None:
@@ -79,23 +79,32 @@ class ModelExport:
                 for i, (feat, len) in enumerate(zip(feats, feats_len)):
                     with torch.no_grad():
                         m(feat, len)
+            elif quant_input is not None:
+                m(*quant_input)
             else:
                 dummy_input = model.get_dummy_inputs()
                 m(*dummy_input)
             
 
         from torch_quant.module import ModuleFilter
-        from torch_quant.quantizer import Backend, Quantizer
+        from torch_quant.observer import HistogramObserver
+        from torch_quant.quantizer import Backend, Device, Quantizer
         from funasr.export.models.modules.decoder_layer import DecoderLayerSANM
         from funasr.export.models.modules.encoder_layer import EncoderLayerSANM
         module_filter = ModuleFilter(include_classes=[EncoderLayerSANM, DecoderLayerSANM])
         module_filter.exclude_op_types = [torch.nn.Conv1d]
+        from functools import partial
+        _dtype, _qscheme = torch.qint8, torch.per_tensor_symmetric
         quantizer = Quantizer(
             module_filter=module_filter,
-            backend=Backend.FBGEMM,
+            backend=Backend.DISC,
+            device=Device.GPU,
+            act_ob_ctr=partial(HistogramObserver, dtype=_dtype, qscheme=_qscheme),
         )
         model.eval()
         calib_model = quantizer.calib(model)
+        if self.device == 'cuda':
+            calib_model = calib_model.cuda()
         _run_calibration_data(calib_model)
         if self.fallback_num > 0:
             # perform automatic mixed precision quantization
@@ -113,10 +122,113 @@ class ModelExport:
             dummy_input = model.get_dummy_inputs(enc_size)
         else:
             dummy_input = model.get_dummy_inputs()
+            dummy_input = torch.load('inference_gpu/data/test_data_1x93x560.pt')
 
         if self.device == 'cuda':
             model = model.cuda()
             dummy_input = tuple([i.cuda() for i in dummy_input])
+
+        """
+        # model.encoder.model.encoders0 = torch.jit.load('inference_gpu/model.encoders0.blade.pt')
+        # model.encoder.model.encoders = torch.jit.load('inference_gpu/model.encoders.blade.pt')
+        import pdb; pdb.set_trace()
+        # output = model.encoder(*dummy_input)
+        if self.quant:
+            quant_model = self._torch_quantize(model.encoder, dummy_input)
+            if self.device == 'cuda':
+                quant_model = quant_model.cuda()
+            outputs = quant_model(*dummy_input)
+            print(outputs)
+            # model_script = torch.jit.trace(quant_model, dummy_input)
+            # model_script.save('int8.encoder.pt')
+            # import sys; sys.exit(0)
+
+            _inputs = torch.load('encoders0_inputs.pth')
+            _inputs = (_inputs[0], _inputs[1][0], _inputs[1][1])
+            _inputs = tuple([i.cuda() for i in _inputs])
+            module = quant_model.model.encoders0[0]
+            model_script = torch.jit.trace(module, _inputs)
+            model_script.save('int8.encoders0.mask.pt')
+            _inputs = torch.load('encoders_inputs.pth')
+            _inputs = (_inputs[0], _inputs[1][0], _inputs[1][1])
+            _inputs = tuple([i.cuda() for i in _inputs])
+            for i in range(49):
+                module = quant_model.model.encoders[i]
+                model_script = torch.jit.trace(module, _inputs)
+                model_script.save('int8.encoders.{}.mask.pt'.format(i))
+        import sys; sys.exit(0)
+        """
+
+        # """
+        import pdb; pdb.set_trace()
+        import torch_blade
+        _dir = 'z_models_int8_encoders'
+        _m = torch.jit.load('{}/blade.encoders0.int8+fp16.mask.pt'.format(_dir))
+        model.encoder.model.encoders0[0] = _m
+        for i in range(49):
+            _m = torch.jit.load('{}/blade.encoders.{}.int8+fp16.mask.pt'.format(_dir, i))
+            model.encoder.model.encoders[i] = _m
+        import pdb; pdb.set_trace()
+        model_script = torch.jit.trace(model, dummy_input)
+        model_script.save('model.blade.mask.enc.int8+fp16.pt')
+        # """
+
+        """
+        import pdb; pdb.set_trace()
+        _inputs = torch.load('decoder_inputs.pth')
+        if self.device == 'cuda':
+            _inputs = tuple([tuple([j.cuda() for j in i]) \
+                if isinstance(i, tuple) else i.cuda() for i in _inputs])
+        if self.quant:
+            quant_model = self._torch_quantize(model.decoder, _inputs)
+            if self.device == 'cuda':
+                quant_model = quant_model.cuda()
+            outputs = quant_model(*_inputs)
+            print(outputs)
+            model_script = torch.jit.trace(quant_model, _inputs)
+            model_script.save('int8.decoder.pt')
+        import sys; sys.exit(0)
+        """
+
+        """
+        import pdb; pdb.set_trace()
+        _inputs = torch.load('encoders_inputs.pth')
+        if self.device == 'cuda':
+            _inputs = tuple([tuple([j.cuda() for j in i]) \
+                if isinstance(i, tuple) else i.cuda() for i in _inputs])
+        _inputs = (_inputs[0], _inputs[1][0], _inputs[1][1])
+        with torch.no_grad():
+            model.encoder.model.encoders[0](*_inputs)
+            model_script = torch.jit.trace(model.encoder.model.encoders[0], _inputs)
+            model_script.save('model.encoders.0.pt')
+            model_script = torch.jit.script(model.encoder.model.encoders[0])
+            model_script.save('model.encoders.0.script.pt')
+        """
+
+        """
+        import pdb; pdb.set_trace()
+        # _inputs = torch.load('encoders0_inputs.pth')
+        _inputs = torch.load('encoders_inputs.pth')
+        if self.device == 'cuda':
+            _inputs = tuple([tuple([j.cuda() for j in i]) \
+                if isinstance(i, tuple) else i.cuda() for i in _inputs])
+        _inputs = (_inputs[0], _inputs[1][0], _inputs[1][1])
+        # outputs = model.encoder.model.encoders0[0](*_inputs)
+        import pdb; pdb.set_trace()
+        if self.quant:
+            # quant_model = self._torch_quantize(model.encoder.model.encoders0, _inputs)
+            quant_model = self._torch_quantize(model.encoder.model.encoders, _inputs)
+            import pdb; pdb.set_trace()
+            if self.device == 'cuda':
+                quant_model = quant_model.cuda()
+            print(_inputs)
+            outputs = quant_model(*_inputs)
+            print(outputs)
+            model_script = torch.jit.trace(quant_model, _inputs)
+            # model_script.save('int8.encoders0.pt')
+            model_script.save('int8.encoders.pt')
+        import sys; sys.exit(0)
+        """
 
         # """
         import os
@@ -200,16 +312,18 @@ class ModelExport:
         # out = enc32(*_half_inputs)
         """
 
-        """
+        # """
         import pdb; pdb.set_trace()
         import torch_blade
         # model.encoder = torch.jit.load('inference_gpu/model.encoder.blade.pt')
         # model.decoder = torch.jit.load('inference_gpu/model.decoder.blade.pt')
-        model.encoder = torch.jit.load('inference_gpu/model.encoder.blade.fp16.pt')
-        model.decoder = torch.jit.load('inference_gpu/model.decoder.blade.fp16.pt')
+        # model.encoder = torch.jit.load('inference_gpu/model.encoder.blade.fp16.pt')
+        # model.decoder = torch.jit.load('inference_gpu/model.decoder.blade.fp16.pt')
+        model.encoder = torch.jit.load('int8.encoder.blade.pt')
+        model.decoder = torch.jit.load('int8.decoder.blade.pt')
         model_script = torch.jit.trace(model, dummy_input)
-        model_script.save('model.blade.opt.pt')
-        """
+        model_script.save('model.blade.int8.pt')
+        # """
 
         # import pdb; pdb.set_trace()
         # model_script = torch.jit.script(model)

@@ -23,8 +23,6 @@ class SANMEncoder(nn.Module):
         self.model = model
         self.feats_dim = feats_dim
         self._output_size = model._output_size
-        import os
-        self.fp16 = float(os.environ.get('FP16', False))
 
         if onnx:
             self.make_pad_mask = MakePadMask(max_seq_len, flip=False)
@@ -50,6 +48,14 @@ class SANMEncoder(nn.Module):
         self.num_heads = model.encoders[0].self_attn.h
         self.hidden_size = model.encoders[0].self_attn.linear_out.out_features
 
+        import os
+        self.fp16 = float(os.environ.get('FP16', False))
+        self.export_fp16 = float(os.environ.get('EXPORT_FP16', False))
+        if self.export_fp16:
+            self.model.encoders0.half()
+            self.model.encoders.half()
+            self.model.after_norm.half()
+
     
     def prepare_mask(self, mask):
         mask_3d_btd = mask[:, :, None]
@@ -61,6 +67,7 @@ class SANMEncoder(nn.Module):
         
         return mask_3d_btd, mask_4d_bhlt
 
+    # """
     def forward(self,
                 speech: torch.Tensor,
                 speech_lengths: torch.Tensor,
@@ -74,6 +81,7 @@ class SANMEncoder(nn.Module):
             xs_pad = self.embed(speech)
 
         if self.fp16: xs_pad = xs_pad / self.fp16
+        if self.export_fp16: xs_pad = xs_pad.half(); mask = tuple([i.half() for i in mask])
         # import pdb; pdb.set_trace()
         encoder_outs = self.model.encoders0(xs_pad, mask)
         xs_pad, masks = encoder_outs[0], encoder_outs[1]
@@ -84,8 +92,39 @@ class SANMEncoder(nn.Module):
 
         # import pdb; pdb.set_trace()
         xs_pad = self.model.after_norm(xs_pad)
+        if self.export_fp16: xs_pad = xs_pad.float()
 
         return xs_pad, speech_lengths
+    """
+    # MASK
+    def forward(self,
+                speech: torch.Tensor,
+                speech_lengths: torch.Tensor,
+                ):
+        speech = speech * self._output_size ** 0.5
+        mask = self.make_pad_mask(speech_lengths)
+        mask = self.prepare_mask(mask)
+        if self.embed is None:
+            xs_pad = speech
+        else:
+            xs_pad = self.embed(speech)
+
+        if self.fp16: xs_pad = xs_pad / self.fp16
+        if self.export_fp16: xs_pad = xs_pad.half(); mask = tuple([i.half() for i in mask])
+        # import pdb; pdb.set_trace()
+        encoder_outs = self.model.encoders0(xs_pad, mask[0], mask[1])
+        xs_pad = encoder_outs[0]
+
+        # import pdb; pdb.set_trace()
+        encoder_outs = self.model.encoders(xs_pad, mask[0], mask[1])
+        xs_pad = encoder_outs[0]
+
+        # import pdb; pdb.set_trace()
+        xs_pad = self.model.after_norm(xs_pad)
+        if self.export_fp16: xs_pad = xs_pad.float()
+
+        return xs_pad, speech_lengths
+    """
 
     def get_output_size(self):
         return self.model.encoders[0].size
